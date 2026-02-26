@@ -4,6 +4,7 @@ import (
 	"fincalparser/internal/config"
 	"fincalparser/internal/infrastructure/logger"
 	"fincalparser/internal/infrastructure/parser"
+	response "fincalparser/pkg/api"
 	"fincalparser/pkg/logger/sl"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/render"
 	"github.com/robfig/cron/v3"
 )
 
@@ -34,14 +36,17 @@ func main() {
 
 	log.Info("logs rotation are enabled")
 
-	parser, err := parser.NewParser(parser.Bskrt, log)
+	parser, err := parser.New(parser.ParserResource{
+		Type: &parser.Bskrt,
+		Year: 2026,
+	}, log, cfg.DataDir)
 	if err != nil {
 		panic(fmt.Sprintf("unable to init parser: %s", err))
 	}
 
-	go parser.GetDays()
+	go parser.Start()
 
-	setupRouter(cfg, log)
+	setupRouter(cfg, log, *parser)
 }
 
 func setupLogRotation(rotate func()) {
@@ -55,7 +60,7 @@ func setupLogRotation(rotate func()) {
 	c.Start()
 }
 
-func setupRouter(cfg *config.Config, log *slog.Logger) {
+func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -89,6 +94,17 @@ func setupRouter(cfg *config.Config, log *slog.Logger) {
 	// r.Post("/api/v1/auth/login", authHandler.Login())
 	// r.Put("/api/v1/auth/refresh", authHandler.Refresh())
 	// r.Post("/api/v1/auth/register", authHandler.Register())
+
+	r.Get("/data", func(w http.ResponseWriter, r *http.Request) {
+		data, err := p.LoadData()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Error("не удалось получить данные с жсон файла")
+			render.JSON(w,r, response.Error("internal error"))
+			return
+		}
+		render.JSON(w,r, data)
+	})
 
 	log.Info("starting server", slog.String("address", srv.Addr))
 

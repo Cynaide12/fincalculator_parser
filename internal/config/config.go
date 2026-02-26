@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Env         string     `yaml:"env" env-default:"local" env-required:"true" env:"ENV"`
 	LogFilePath string     `yaml:"log_file_path" env-default:".logs/fincalparser.log" env:"LOG_FILE_PATH"`
+	DataDir     string     `yaml:"data_dir" env-default:"data_dir" env:"DATA_DIR"`
 	HTTPServer  HTTPServer `yaml:"http_server"`
 }
 

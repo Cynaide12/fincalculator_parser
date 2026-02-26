@@ -1,10 +1,19 @@
 package parser
 
 import (
+	"encoding/json"
+	"fincalparser/pkg/logger/sl"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/robfig/cron/v3"
 )
 
 type ParserResourceType string
@@ -16,29 +25,47 @@ var (
 	Tatar ParserResourceType = "tatarstan"
 )
 
+type ParserResource struct {
+	Type *ParserResourceType
+	Year int
+}
+
+var dayNames = map[int]string{
+	1: "ПН",
+	2: "ВТ",
+	3: "СР",
+	4: "ЧТ",
+	5: "ПТ",
+	6: "СБ",
+	7: "ВС",
+}
+
 const baseUrl = "https://fincalculator.ru/kalendar"
 
 type Parser struct {
-	resource ParserResourceType
+	resource ParserResource
 	doc      *goquery.Document
 	log      *slog.Logger
+	dataDir  string
 }
 
 type CalendarDay struct {
-	ID         int64
-	Year       int
-	Month      int
-	Day        int
-	IsWorking  bool
-	IsHoliday  bool
-	DayType    string //'working' 'weekend' 'holiday' 'shortened'
-	WeekNumber int    //номер недели в году(52/53/54 и тп)
+	Year       int    `json:"year"`
+	Month      string `json:"month"`
+	Day        int    `json:"day"`
+	DayName    string `json:"day_name"`
+	DayType    string `json:"day_type"`    //'working' 'weekend' 'shortened'
+	WeekNumber int    `json:"week_number"` //номер недели в году(52/53/54 и тп)
 }
 
-func NewParser(resource ParserResourceType, log *slog.Logger) (*Parser, error) {
+func New(resource ParserResource, log *slog.Logger, dataDir string) (*Parser, error) {
+	if resource.Year == 0 {
+		resource.Year = time.Now().Year()
+	}
 	p := &Parser{
 		resource: resource,
 		log:      log,
+		dataDir:  dataDir,
 	}
 	doc, err := p.getDocument()
 	if err != nil {
@@ -50,8 +77,29 @@ func NewParser(resource ParserResourceType, log *slog.Logger) (*Parser, error) {
 	return p, nil
 }
 
+func (p Parser) Start() {
+	c := cron.New()
+	c.AddFunc("@every day", p.execute)
+	c.Start()
+}
+
+func (p Parser) execute() {
+	data, err := p.getData()
+	if err != nil {
+		p.log.Error("ошибка при получении данных календаря", sl.Err(err))
+	}
+	if err := p.saveData(data); err != nil {
+		p.log.Error("ошибка при сохранении данных", sl.Err(err))
+	}
+}
+
 func (p Parser) getDocument() (*goquery.Document, error) {
-	url := fmt.Sprintf("%s/%s", baseUrl, p.resource)
+	var url string
+	if p.resource.Type == nil {
+		url = fmt.Sprintf("%s/%d", baseUrl, p.resource.Year)
+	} else if p.resource.Type != nil {
+		url = fmt.Sprintf("%s/%d/%s", baseUrl, p.resource.Year, *p.resource.Type)
+	}
 
 	p.log.Info("делаю запрос")
 
@@ -72,15 +120,104 @@ func (p Parser) getDocument() (*goquery.Document, error) {
 	return doc, nil
 }
 
-func (p Parser) GetDays() (*[]CalendarDay, error) {
+func (p Parser) getData() (*[]CalendarDay, error) {
 
 	p.log.Info("начинаю парсинг")
 
-	calendarTables := p.doc.Find(".calendar.calendar__viewable fc-calendar-month-table > .calendar-month-table")
+	calendarTables := p.doc.Find(".calendar.calendar__viewable > .row > .col-md-3.ng-star-inserted")
 
-	p.log.Debug(calendarTables.Text())
+	var data []CalendarDay
 
-	// calendarTables.Find()
+	var e error
 
-	return nil, nil
+	calendarTables.Each(func(i int, s *goquery.Selection) {
+		monthName := s.Find(".calendar_month-name").Text()
+
+		s.Find(".calendar-month-table_line.ng-star-inserted").Each(func(i int, z *goquery.Selection) {
+			weekNumber, err := strconv.Atoi(z.Find(".calendar-month-table_week-number").Text())
+			if err != nil {
+				e = err
+				return
+			}
+			z.Find(".calendar-month-day").Each(func(i int, d *goquery.Selection) {
+				if d.Text() == "" {
+					return
+				}
+				var dayType string
+				if d.HasClass("calendar-month-day__dayoff") {
+					dayType = "weekend"
+				} else if d.HasClass("calendar-month-day__asterisk") {
+					dayType = "shortened"
+				} else {
+					dayType = "working"
+				}
+				day, err := strconv.Atoi(d.Text())
+				if err != nil {
+					e = err
+					return
+				}
+				data = append(data, CalendarDay{
+					Year:       p.resource.Year,
+					Month:      monthName,
+					Day:        day,
+					DayName:    dayNames[i+1],
+					DayType:    dayType,
+					WeekNumber: weekNumber,
+				})
+			})
+
+		})
+	})
+	if e != nil {
+		return nil, e
+	}
+
+	p.log.Info("закончил парсинг")
+
+	return &data, nil
+}
+
+func (p Parser) saveData(data *[]CalendarDay) error {
+	err := os.MkdirAll(p.dataDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("не удалось создать директорию для хранения: %w", err)
+	}
+
+	file, err := os.Create(filepath.Join(p.dataDir, "data.json"))
+	if err != nil {
+		return fmt.Errorf("не удалось создать файл в папке назначения: %w", err)
+	}
+	defer file.Close()
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("ошибка при маршаллинге данных в жсон: %w", err)
+	}
+
+	if _, err := file.Write(b); err != nil {
+		return fmt.Errorf("не удалось сохранить данные: %w", err)
+	}
+
+	return nil
+}
+
+// получение дней с сохраненного жсон файла
+func (p Parser) LoadData() ([]CalendarDay, error) {
+	file, err := os.Open(filepath.Join(p.dataDir, "data.json"))
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	b, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var data []CalendarDay
+	if err := json.Unmarshal(b, &data); err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
