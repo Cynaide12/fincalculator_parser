@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -79,7 +80,7 @@ func New(resource ParserResource, log *slog.Logger, dataDir string) (*Parser, er
 
 func (p Parser) Start() {
 	c := cron.New()
-	c.AddFunc("@every day", p.execute)
+	c.AddFunc("@every 1s", p.execute)
 	c.Start()
 }
 
@@ -131,7 +132,7 @@ func (p Parser) getData() (*[]CalendarDay, error) {
 	var e error
 
 	calendarTables.Each(func(i int, s *goquery.Selection) {
-		monthName := s.Find(".calendar_month-name").Text()
+		monthName := []rune(strings.TrimSpace(s.Find(".calendar_month-name").Text()))
 
 		s.Find(".calendar-month-table_line.ng-star-inserted").Each(func(i int, z *goquery.Selection) {
 			weekNumber, err := strconv.Atoi(z.Find(".calendar-month-table_week-number").Text())
@@ -158,7 +159,7 @@ func (p Parser) getData() (*[]CalendarDay, error) {
 				}
 				data = append(data, CalendarDay{
 					Year:       p.resource.Year,
-					Month:      monthName,
+					Month:      string(monthName[:3]),
 					Day:        day,
 					DayName:    dayNames[i+1],
 					DayType:    dayType,
