@@ -91,9 +91,6 @@ func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 		Debug:            true,
 	}))
 
-	// r.Post("/api/v1/auth/login", authHandler.Login())
-	// r.Put("/api/v1/auth/refresh", authHandler.Refresh())
-	// r.Post("/api/v1/auth/register", authHandler.Register())
 
 	r.Get("/data", func(w http.ResponseWriter, r *http.Request) {
 		data, err := p.LoadData()

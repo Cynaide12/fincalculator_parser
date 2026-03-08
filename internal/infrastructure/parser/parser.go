@@ -51,12 +51,13 @@ type Parser struct {
 }
 
 type CalendarDay struct {
-	Year       int    `json:"year"`
-	Month      string `json:"month"`
-	Day        int    `json:"day"`
-	DayName    string `json:"day_name"`
-	DayType    string `json:"day_type"`    //'working' 'weekend' 'shortened'
-	WeekNumber int    `json:"week_number"` //номер недели в году(52/53/54 и тп)
+	Year       int       `json:"year"`
+	Month      string    `json:"month"`
+	Day        int       `json:"day"` // день месяца
+	DayName    string    `json:"day_name"`
+	DayType    string    `json:"day_type"`    //'working' 'weekend' 'shortened'
+	WeekNumber int       `json:"week_number"` //номер недели в году(52/53/54 и тп)
+	Date       time.Time `json:"date"`
 }
 
 func New(resource ParserResource, log *slog.Logger, dataDir string) (*Parser, error) {
@@ -94,6 +95,11 @@ func (p Parser) execute() {
 	}
 }
 
+func (p Parser) ExecuteWithoutSaving() (*[]CalendarDay, error) {
+	data, err := p.getData()
+	return data, err
+}
+
 func (p Parser) getDocument() (*goquery.Document, error) {
 	var url string
 	if p.resource.Type == nil {
@@ -127,12 +133,18 @@ func (p Parser) getData() (*[]CalendarDay, error) {
 
 	calendarTables := p.doc.Find(".calendar.calendar__viewable > .row > .col-md-3.ng-star-inserted")
 
+	timeLocation, err := time.LoadLocation("Asia/Yekaterinburg")
+	if err != nil {
+		return nil, err
+	}
+
 	var data []CalendarDay
 
 	var e error
 
 	calendarTables.Each(func(i int, s *goquery.Selection) {
 		monthName := []rune(strings.TrimSpace(s.Find(".calendar_month-name").Text()))
+		monthNumber := i + 1
 
 		s.Find(".calendar-month-table_line.ng-star-inserted").Each(func(i int, z *goquery.Selection) {
 			weekNumber, err := strconv.Atoi(z.Find(".calendar-month-table_week-number").Text())
@@ -164,6 +176,7 @@ func (p Parser) getData() (*[]CalendarDay, error) {
 					DayName:    dayNames[i+1],
 					DayType:    dayType,
 					WeekNumber: weekNumber,
+					Date:       time.Date(p.resource.Year, time.Month(monthNumber), day, 0, 0, 0, 0, timeLocation),
 				})
 			})
 
