@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+type FindType string
+
+var (
+	Prev FindType = "prev"
+	Next FindType = "next"
+)
+
 type FindDayUseCase struct {
 	log    *slog.Logger
 	parser *parser.Parser
@@ -15,40 +22,62 @@ func NewFindDayUseCase(log *slog.Logger, parser *parser.Parser) *FindDayUseCase 
 	return &FindDayUseCase{log, parser}
 }
 
-func (uc *FindDayUseCase) Execute(startDate time.Time, daysPeriod int16) (*parser.CalendarDay, error) {
-	var i int16 //счетчик проверенных дней
-	var day *parser.CalendarDay = nil
-	var year = time.Now().Year() //год найденного дня
+func (uc *FindDayUseCase) Execute(startDate time.Time, daysPeriod int16, searchType FindType) (*parser.CalendarDay, error) {
+	data, err := uc.parser.LoadData()
+	if err != nil {
+		return nil, err
+	}
 
 	timeLocation, err := time.LoadLocation("Asia/Yekaterinburg")
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := uc.parser.LoadData()
-	if err != nil {
-		return nil, err
+	if searchType == Next {
+		return uc.findNextDay(data, startDate, daysPeriod, timeLocation)
 	}
-	for day == nil {
-		for _, date := range data {
-			//так как цикл может идти множество раз по повторяющемуся календарю(на следующий год данных не может быть)
-			//то нужно дату у проверяемого дня увеличивать в соответствии с циклом
-			date.Date = time.Date(year, time.Month(date.MonthNumber), date.Day, 0, 0, 0, 0, timeLocation)
-			//если дата дня в шаге цикла > startDate
-			if date.Date.Compare(startDate) > 0 {
-				//если счетчик проверенных дней > периода даты И день является рабочим
-				if i >= daysPeriod && date.DayType == "working" {
-					date.Year = year
-					uc.log.Debug("первое найденное", year, date.Date, startDate, date.MonthNumber)
-					day = &date
-					break
+	return uc.findPrevDay(data, startDate, daysPeriod, timeLocation)
+}
+
+func (uc *FindDayUseCase) findNextDay(data []parser.CalendarDay, startDate time.Time, daysPeriod int16, loc *time.Location) (*parser.CalendarDay, error) {
+	var checkedDays int16 = 0
+	currentYear := startDate.Year()
+	
+	for {
+		for _, day := range data {
+			date := time.Date(currentYear, time.Month(day.MonthNumber), day.Day, 0, 0, 0, 0, loc)
+			
+			if date.After(startDate) {
+				if checkedDays >= daysPeriod && day.DayType == "working" {
+					day.Date = date
+					day.Year = currentYear
+					return &day, nil
 				}
-				//иначе увеличиваем счетчик проверенных дней
-				i++
+				checkedDays++
 			}
 		}
-		year++
+		currentYear++
 	}
+}
 
-	return day, nil
+func (uc *FindDayUseCase) findPrevDay(data []parser.CalendarDay, startDate time.Time, daysPeriod int16, loc *time.Location) (*parser.CalendarDay, error) {
+	var checkedDays int16 = 0
+	currentYear := startDate.Year()
+	
+	for {
+		for i := len(data) - 1; i >= 0; i-- {
+			day := data[i]
+			date := time.Date(currentYear, time.Month(day.MonthNumber), day.Day, 0, 0, 0, 0, loc)
+			
+			if date.Before(startDate) {
+				if checkedDays >= daysPeriod && day.DayType == "working" {
+					day.Date = date
+					day.Year = currentYear
+					return &day, nil
+				}
+				checkedDays++
+			}
+		}
+		currentYear--
+	}
 }

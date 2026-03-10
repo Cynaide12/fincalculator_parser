@@ -120,7 +120,16 @@ func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 			return
 		}
 
-		data, err := findDayuc.Execute(start_date, int16(days_period))
+		find_type := r.URL.Query().Get("find_type")
+		if find_type != "" && (find_type != "prev" && find_type != "next") {
+			w.WriteHeader(http.StatusBadRequest)
+			render.JSON(w, r, "allowed find_type: prev, next")
+			return
+		} else if find_type == "" {
+			find_type = "next"
+		}
+
+		data, err := findDayuc.Execute(start_date, int16(days_period), usecase.FindType(find_type))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Error("не удалось получить данные с жсон файла")
