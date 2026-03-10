@@ -4,10 +4,12 @@ import (
 	"fincalparser/internal/config"
 	"fincalparser/internal/infrastructure/logger"
 	"fincalparser/internal/infrastructure/parser"
+	"fincalparser/internal/usecase"
 	response "fincalparser/pkg/api"
 	"fincalparser/pkg/logger/sl"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"net/http"
 	"os"
@@ -91,16 +93,41 @@ func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 		Debug:            true,
 	}))
 
+	findDayuc := usecase.NewFindDayUseCase(log, &p)
 
 	r.Get("/data", func(w http.ResponseWriter, r *http.Request) {
 		data, err := p.LoadData()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Error("не удалось получить данные с жсон файла")
-			render.JSON(w,r, response.Error("internal error"))
+			render.JSON(w, r, response.Error("internal error"))
 			return
 		}
-		render.JSON(w,r, data)
+		render.JSON(w, r, data)
+	})
+
+	r.Get("/find_day", func(w http.ResponseWriter, r *http.Request) {
+		start_date, err := time.Parse(time.RFC3339, r.URL.Query().Get("start_date"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			render.JSON(w, r, "bad start date")
+			return
+		}
+		days_period, err := strconv.Atoi(r.URL.Query().Get("days_period"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			render.JSON(w, r, "bad days period")
+			return
+		}
+
+		data, err := findDayuc.Execute(start_date, int16(days_period))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Error("не удалось получить данные с жсон файла")
+			render.JSON(w, r, response.Error("internal error"))
+			return
+		}
+		render.JSON(w, r, data)
 	})
 
 	log.Info("starting server", slog.String("address", srv.Addr))

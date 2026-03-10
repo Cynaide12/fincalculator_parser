@@ -51,13 +51,14 @@ type Parser struct {
 }
 
 type CalendarDay struct {
-	Year       int       `json:"year"`
-	Month      string    `json:"month"`
-	Day        int       `json:"day"` // день месяца
-	DayName    string    `json:"day_name"`
-	DayType    string    `json:"day_type"`    //'working' 'weekend' 'shortened'
-	WeekNumber int       `json:"week_number"` //номер недели в году(52/53/54 и тп)
-	Date       time.Time `json:"date"`
+	Year        int       `json:"year"`
+	Month       string    `json:"month"`
+	MonthNumber int8      `json:"month_number"`
+	Day         int       `json:"day"` // день месяца
+	DayName     string    `json:"day_name"`
+	DayType     string    `json:"day_type"`    //'working' 'weekend' 'shortened'
+	WeekNumber  int       `json:"week_number"` //номер недели в году(52/53/54 и тп)
+	Date        time.Time `json:"date"`
 }
 
 func New(resource ParserResource, log *slog.Logger, dataDir string) (*Parser, error) {
@@ -81,7 +82,7 @@ func New(resource ParserResource, log *slog.Logger, dataDir string) (*Parser, er
 
 func (p Parser) Start() {
 	c := cron.New()
-	c.AddFunc("@every 1s", p.execute)
+	c.AddFunc("@every 1d", p.execute)
 	c.Start()
 }
 
@@ -170,13 +171,14 @@ func (p Parser) getData() (*[]CalendarDay, error) {
 					return
 				}
 				data = append(data, CalendarDay{
-					Year:       p.resource.Year,
-					Month:      string(monthName[:3]),
-					Day:        day,
-					DayName:    dayNames[i+1],
-					DayType:    dayType,
-					WeekNumber: weekNumber,
-					Date:       time.Date(p.resource.Year, time.Month(monthNumber), day, 0, 0, 0, 0, timeLocation),
+					Year:        p.resource.Year,
+					Month:       string(monthName[:3]),
+					MonthNumber: int8(monthNumber),
+					Day:         day,
+					DayName:     dayNames[i+1],
+					DayType:     dayType,
+					WeekNumber:  weekNumber,
+					Date:        time.Date(p.resource.Year, time.Month(monthNumber), day, 0, 0, 0, 0, timeLocation),
 				})
 			})
 

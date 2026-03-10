@@ -15,32 +15,40 @@ func NewFindDayUseCase(log *slog.Logger, parser *parser.Parser) *FindDayUseCase 
 	return &FindDayUseCase{log, parser}
 }
 
-//TODO: подумать че делать если startDate + daysPeriod указывает на следующий год. идти по циклу data по новой???
 func (uc *FindDayUseCase) Execute(startDate time.Time, daysPeriod int16) (*parser.CalendarDay, error) {
+	var i int16 //счетчик проверенных дней
+	var day *parser.CalendarDay = nil
+	var year = time.Now().Year() //год найденного дня
 
-	// обрезаем данные, оставляем только данные где дата >= startDate и где dayType == 'working'
-	var slicedDates []parser.CalendarDay
-	// year := startDate.Year()
-	for true {
-	if len(slicedDates) < int(daysPeriod) {
-			data, err := uc.parser.LoadData()
-			if err != nil {
-				return nil, err
-			}
-			for _, date := range data {
-				if startDate.Compare(date.Date) > 0 && date.DayType == "working" {
-					slicedDates = append(slicedDates, date)
-				}
-			}
-		}
-		break
+	timeLocation, err := time.LoadLocation("Asia/Yekaterinburg")
+	if err != nil {
+		return nil, err
 	}
 
-	// var day *parser.CalendarDay = nil
+	data, err := uc.parser.LoadData()
+	if err != nil {
+		return nil, err
+	}
+	for day == nil {
+		for _, date := range data {
+			//так как цикл может идти множество раз по повторяющемуся календарю(на следующий год данных не может быть)
+			//то нужно дату у проверяемого дня увеличивать в соответствии с циклом
+			date.Date = time.Date(year, time.Month(date.MonthNumber), date.Day, 0, 0, 0, 0, timeLocation)
+			//если дата дня в шаге цикла > startDate
+			if date.Date.Compare(startDate) > 0 {
+				//если счетчик проверенных дней > периода даты И день является рабочим
+				if i >= daysPeriod && date.DayType == "working" {
+					date.Year = year
+					uc.log.Debug("первое найденное", year, date.Date, startDate, date.MonthNumber)
+					day = &date
+					break
+				}
+				//иначе увеличиваем счетчик проверенных дней
+				i++
+			}
+		}
+		year++
+	}
 
-	// while day == nil {
-	// 	if len(slicedDates) > int(daysPeriod)
-	// }
-
-	return nil, nil
+	return day, nil
 }
