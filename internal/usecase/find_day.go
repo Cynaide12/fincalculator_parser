@@ -48,7 +48,7 @@ func (uc *FindDayUseCase) findNextDay(data []parser.CalendarDay, startDate time.
 			date := time.Date(currentYear, time.Month(day.MonthNumber), day.Day, 0, 0, 0, 0, loc)
 			
 			if date.After(startDate) {
-				if checkedDays >= daysPeriod && day.DayType == "working" {
+				if checkedDays >= daysPeriod && (day.DayType == "working" || day.DayType == "shortened") {
 					day.Date = date
 					day.Year = currentYear
 					return &day, nil

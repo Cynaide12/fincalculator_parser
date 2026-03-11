@@ -45,7 +45,6 @@ const baseUrl = "https://fincalculator.ru/kalendar"
 
 type Parser struct {
 	resource ParserResource
-	doc      *goquery.Document
 	log      *slog.Logger
 	dataDir  string
 }
@@ -70,23 +69,17 @@ func New(resource ParserResource, log *slog.Logger, dataDir string) (*Parser, er
 		log:      log,
 		dataDir:  dataDir,
 	}
-	doc, err := p.getDocument()
-	if err != nil {
-		return nil, err
-	}
-
-	p.doc = doc
 
 	return p, nil
 }
 
-func (p Parser) Start() {
+func (p *Parser) Start() {
 	c := cron.New()
 	c.AddFunc("@every 1d", p.execute)
 	c.Start()
 }
 
-func (p Parser) execute() {
+func (p *Parser) execute() {
 	data, err := p.getData()
 	if err != nil {
 		p.log.Error("ошибка при получении данных календаря", sl.Err(err))
@@ -132,7 +125,12 @@ func (p Parser) getData() (*[]CalendarDay, error) {
 
 	p.log.Info("начинаю парсинг")
 
-	calendarTables := p.doc.Find(".calendar.calendar__viewable > .row > .col-md-3.ng-star-inserted")
+	doc, err := p.getDocument()
+	if err != nil {
+		return nil, err
+	}
+
+	calendarTables := doc.Find(".calendar.calendar__viewable > .row > .col-md-3.ng-star-inserted")
 
 	timeLocation, err := time.LoadLocation("Asia/Yekaterinburg")
 	if err != nil {
