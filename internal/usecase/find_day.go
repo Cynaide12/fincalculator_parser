@@ -42,11 +42,11 @@ func (uc *FindDayUseCase) Execute(startDate time.Time, daysPeriod int16, searchT
 func (uc *FindDayUseCase) findNextDay(data []parser.CalendarDay, startDate time.Time, daysPeriod int16, loc *time.Location) (*parser.CalendarDay, error) {
 	var checkedDays int16 = 0
 	currentYear := startDate.Year()
-	
+
 	for {
 		for _, day := range data {
 			date := time.Date(currentYear, time.Month(day.MonthNumber), day.Day, 0, 0, 0, 0, loc)
-			
+
 			if date.After(startDate) {
 				if checkedDays >= daysPeriod && (day.DayType == "working" || day.DayType == "shortened") {
 					day.Date = date
@@ -63,14 +63,14 @@ func (uc *FindDayUseCase) findNextDay(data []parser.CalendarDay, startDate time.
 func (uc *FindDayUseCase) findPrevDay(data []parser.CalendarDay, startDate time.Time, daysPeriod int16, loc *time.Location) (*parser.CalendarDay, error) {
 	var checkedDays int16 = 0
 	currentYear := startDate.Year()
-	
+
 	for {
 		for i := len(data) - 1; i >= 0; i-- {
 			day := data[i]
 			date := time.Date(currentYear, time.Month(day.MonthNumber), day.Day, 0, 0, 0, 0, loc)
-			
+
 			if date.Before(startDate) {
-				if checkedDays >= daysPeriod && day.DayType == "working" {
+				if checkedDays >= daysPeriod && (day.DayType == "working" || day.DayType == "shortened") {
 					day.Date = date
 					day.Year = currentYear
 					return &day, nil
