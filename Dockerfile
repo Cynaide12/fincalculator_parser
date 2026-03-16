@@ -10,6 +10,6 @@ FROM alpine:latest
 RUN apk add --no-cache
 WORKDIR /app
 COPY --from=builder /src .
-EXPOSE 8081
+EXPOSE 8083
 ## изменить на папку, в которую будет ложиться бэк в контейнере
 CMD ["./parser"] 
