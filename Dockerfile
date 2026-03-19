@@ -7,9 +7,9 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o parser ./cmd/main.go
 
 FROM alpine:latest
-RUN apk add --no-cache
+RUN apk add --no-cache tzdata
 WORKDIR /app
 COPY --from=builder /src .
 EXPOSE 8083
-## изменить на папку, в которую будет ложиться бэк в контейнере
-CMD ["./parser"] 
+
+CMD ["./parser"]

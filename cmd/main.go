@@ -99,7 +99,7 @@ func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 		data, err := p.LoadData()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Error("не удалось получить данные с жсон файла")
+			log.Error("не удалось получить данные с жсон файла", sl.Err(err))
 			render.JSON(w, r, response.Error("internal error"))
 			return
 		}
@@ -132,7 +132,7 @@ func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 		data, err := findDayuc.Execute(start_date, int16(days_period), usecase.FindType(find_type))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			log.Error("не удалось получить данные с жсон файла")
+			log.Error("ошибка при поиске дня юзкейс", sl.Err(err))
 			render.JSON(w, r, response.Error("internal error"))
 			return
 		}
