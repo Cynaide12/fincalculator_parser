@@ -136,6 +136,7 @@ func setupRouter(cfg *config.Config, log *slog.Logger, p parser.Parser) {
 			render.JSON(w, r, response.Error("internal error"))
 			return
 		}
+		log.Debug("parser find day data", slog.Any("date", data.Date), slog.Any("date utc", data.Date.UTC()))
 		render.JSON(w, r, data)
 	})
 
